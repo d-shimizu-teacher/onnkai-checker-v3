@@ -123,12 +123,13 @@
     <!-- 無段階スライダーエリア -->
     <div class="slider-box">
       <div class="slider-title">ひろう おとの はんい</div>
-      <div id="slider-value-text" class="slider-label">📱 ちかく（じぶんの おと だけ）</div>
+      <div id="slider-value-text" class="slider-label">🏫 ふつう（きょうしつ・かんしょう）</div>
       
       <!-- 先生確認用の数値（閾値）表示 -->
-      <div class="threshold-val-display">（しきい値: <span id="threshold-num">0.12</span>）</div>
+      <div class="threshold-val-display">（しきい値: <span id="threshold-num">0.05</span>）</div>
 
-      <input type="range" id="sensitivity-slider" min="0.02" max="0.30" step="0.01" value="0.12" oninput="updateSensitivity(this.value)">
+      <!-- グラスの音を拾いやすいよう初期値を0.05に設定 -->
+      <input type="range" id="sensitivity-slider" min="0.01" max="0.30" step="0.01" value="0.05" oninput="updateSensitivity(this.value)">
       
       <div class="slider-scale">
         <span>📢 とおく</span>
@@ -146,8 +147,8 @@
     let isListening = false;
     let animationId = null;
 
-    // 音量しきい値（初期値: 0.12）
-    let sensitivityThreshold = 0.12;
+    // 音量しきい値（グラスなどの短発音向けに初期値を 0.05 に変更）
+    let sensitivityThreshold = 0.05;
 
     // ブレ防止用変数
     let lastNoteIndex = -1;
@@ -181,8 +182,8 @@
         label.innerText = "📱 めっちゃ ちかく（ぴったり ひっつける）";
       } else if (sensitivityThreshold >= 0.11) {
         label.innerText = "📱 ちかく（じぶんの おと だけ）";
-      } else if (sensitivityThreshold >= 0.06) {
-        label.innerText = "🏫 ふつう（きょうしつ）";
+      } else if (sensitivityThreshold >= 0.05) {
+        label.innerText = "🏫 ふつう（きょうしつ・かんしょう）";
       } else {
         label.innerText = "📢 とおく（ひろく ひろう）";
       }
@@ -193,8 +194,13 @@
       
       if (!isListening) {
         try {
+          // 【対策1】ノイズキャンセリング等の自動カット処理を無効化
           const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: { echoCancellation: true, noiseSuppression: true } 
+            audio: { 
+              echoCancellation: false, 
+              noiseSuppression: false,
+              autoGainControl: false 
+            } 
           });
 
           audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -244,13 +250,14 @@
       if (rms > sensitivityThreshold) {
         const pitch = autoCorrelate(buffer, audioCtx.sampleRate);
         
-        if (pitch !== -1 && pitch > 80 && pitch < 1000) {
+        if (pitch !== -1 && pitch > 80 && pitch < 2000) {
           const noteNum = Math.round(12 * (Math.log2(pitch / 440)) + 69);
           const noteIndex = (noteNum % 12 + 12) % 12;
 
+          // 【対策2】保持カウントを 2 回（約0.03秒）に短縮し、瞬発的な音へ即座に反応
           if (noteIndex === lastNoteIndex) {
             noteHoldCount++;
-            if (noteHoldCount >= 6) { 
+            if (noteHoldCount >= 2) { 
               const info = noteData[noteIndex];
               const displayElem = document.getElementById("note-display");
               const detailElem = document.getElementById("detail-display");
